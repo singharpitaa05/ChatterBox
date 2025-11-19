@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext';
 import DashboardPage from './pages/DashboardPage';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
+import ProfileSetupPage from './pages/ProfileSetupPage';
 import SignupPage from './pages/SignupPage';
 
 function App() {
@@ -19,6 +20,14 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
 
           {/* Protected Routes */}
+          <Route
+            path="/profile-setup"
+            element={
+              <PrivateRoute>
+                <ProfileSetupPage />
+              </PrivateRoute>
+            }
+          />
           <Route
             path="/dashboard"
             element={
