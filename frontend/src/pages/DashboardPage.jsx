@@ -1,36 +1,65 @@
-// DASHBOARD PAGE
+// DASHBOARD PAGE - PHASE 3 WITH REAL-TIME CHAT
 
 import { LogOut, MessageSquare, Settings, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ChatWindow from '../components/ChatWindow';
+import ConversationItem from '../components/ConversationItem';
 import ProfileEditModal from '../components/ProfileEditModal';
 import UserSearch from '../components/UserSearch';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
+import { createOrGetConversation, getConversations } from '../services/conversationService';
 import { getAllUsers } from '../services/userService';
 
 const DashboardPage = () => {
   const { user, logout } = useAuth();
+  const { socket, onlineUsers } = useSocket();
   const navigate = useNavigate();
 
   const [users, setUsers] = useState([]);
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [conversations, setConversations] = useState([]);
+  const [selectedConversation, setSelectedConversation] = useState(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('chats'); // 'chats' or 'users'
 
-  // Fetch all users on component mount
+  // Fetch conversations and users on component mount
   useEffect(() => {
+    fetchConversations();
     fetchUsers();
   }, []);
 
+  // Listen for new messages to update conversation list
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on('new_message', (newMessage) => {
+      // Refresh conversations to update last message and unread count
+      fetchConversations();
+    });
+
+    return () => {
+      socket.off('new_message');
+    };
+  }, [socket]);
+
+  // Fetch all conversations
+  const fetchConversations = async () => {
+    setLoading(true);
+    const result = await getConversations();
+    if (result.success) {
+      setConversations(result.data);
+    }
+    setLoading(false);
+  };
+
   // Fetch all users
   const fetchUsers = async () => {
-    setLoading(true);
     const result = await getAllUsers();
     if (result.success) {
       setUsers(result.data);
     }
-    setLoading(false);
   };
 
   // Handle logout
@@ -39,15 +68,34 @@ const DashboardPage = () => {
     navigate('/login');
   };
 
-  // Handle user selection from search or list
-  const handleUserSelect = (selectedUser) => {
-    setSelectedUser(selectedUser);
+  // Handle user selection from search or users list
+  const handleUserSelect = async (selectedUser) => {
+    // Create or get conversation with selected user
+    const result = await createOrGetConversation(selectedUser._id);
+    if (result.success) {
+      setSelectedConversation(result.data);
+      setActiveTab('chats'); // Switch to chats tab
+      // Refresh conversations list
+      fetchConversations();
+    }
+  };
+
+  // Handle conversation selection
+  const handleConversationSelect = (conversation) => {
+    setSelectedConversation(conversation);
+  };
+
+  // Handle back button (mobile)
+  const handleBack = () => {
+    setSelectedConversation(null);
   };
 
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Left Sidebar */}
-      <div className="w-full md:w-80 bg-white border-r flex flex-col">
+      <div className={`w-full md:w-80 bg-white border-r flex flex-col ${
+        selectedConversation ? 'hidden md:flex' : 'flex'
+      }`}>
         {/* Sidebar Header */}
         <div className="p-4 border-b bg-blue-600">
           <div className="flex items-center justify-between mb-4">
@@ -107,6 +155,11 @@ const DashboardPage = () => {
           >
             <MessageSquare size={18} />
             <span>Chats</span>
+            {conversations.length > 0 && (
+              <span className="bg-blue-600 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                {conversations.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('users')}
@@ -129,15 +182,27 @@ const DashboardPage = () => {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             </div>
           ) : activeTab === 'chats' ? (
-            // Chats Tab (Empty for now - Phase 3)
-            <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-              <MessageSquare size={64} className="text-gray-300 mb-4" />
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">No Conversations Yet</h3>
-              <p className="text-sm text-gray-500">
-                Search for users and start chatting!
-              </p>
-              <p className="text-xs text-blue-600 mt-4">Coming in Phase 3</p>
-            </div>
+            // Chats Tab
+            conversations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                <MessageSquare size={64} className="text-gray-300 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">No Conversations Yet</h3>
+                <p className="text-sm text-gray-500">
+                  Search for users and start chatting!
+                </p>
+              </div>
+            ) : (
+              <div>
+                {conversations.map((conversation) => (
+                  <ConversationItem
+                    key={conversation._id}
+                    conversation={conversation}
+                    isActive={selectedConversation?._id === conversation._id}
+                    onClick={() => handleConversationSelect(conversation)}
+                  />
+                ))}
+              </div>
+            )
           ) : (
             // Users Tab
             <div>
@@ -151,9 +216,7 @@ const DashboardPage = () => {
                   <div
                     key={u._id}
                     onClick={() => handleUserSelect(u)}
-                    className={`flex items-center space-x-3 p-4 cursor-pointer border-b hover:bg-gray-50 transition ${
-                      selectedUser?._id === u._id ? 'bg-blue-50' : ''
-                    }`}
+                    className="flex items-center space-x-3 p-4 cursor-pointer border-b hover:bg-gray-50 transition"
                   >
                     <div className="relative">
                       <img
@@ -163,7 +226,7 @@ const DashboardPage = () => {
                       />
                       <span
                         className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                          u.status === 'online' ? 'bg-green-500' : 'bg-gray-400'
+                          onlineUsers.includes(u._id) ? 'bg-green-500' : 'bg-gray-400'
                         }`}
                       ></span>
                     </div>
@@ -180,46 +243,18 @@ const DashboardPage = () => {
       </div>
 
       {/* Right Chat Area */}
-      <div className="flex-1 flex flex-col bg-gray-50">
-        {selectedUser ? (
-          // User Selected - Show Profile (Phase 3 will show chat)
-          <div className="flex flex-col items-center justify-center h-full p-8">
-            <img
-              src={selectedUser.avatar}
-              alt={selectedUser.username}
-              className="w-32 h-32 rounded-full object-cover border-4 border-blue-500 mb-4"
-            />
-            <h2 className="text-3xl font-bold text-gray-800 mb-2">{selectedUser.username}</h2>
-            <p className="text-gray-600 mb-4">{selectedUser.email}</p>
-            <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-md">
-              <h3 className="font-semibold text-gray-700 mb-2">Bio</h3>
-              <p className="text-gray-600 mb-4">{selectedUser.bio}</p>
-              <div className="flex items-center space-x-2">
-                <span className="text-gray-700 font-semibold">Status:</span>
-                <span
-                  className={`inline-flex items-center space-x-2 ${
-                    selectedUser.status === 'online' ? 'text-green-600' : 'text-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      selectedUser.status === 'online' ? 'bg-green-600' : 'bg-gray-600'
-                    }`}
-                  ></span>
-                  <span className="capitalize">{selectedUser.status}</span>
-                </span>
-              </div>
-            </div>
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-              <p className="text-blue-800 font-semibold">💬 Chat feature coming in Phase 3!</p>
-            </div>
-          </div>
+      <div className={`flex-1 flex flex-col bg-gray-50 ${
+        selectedConversation ? 'flex' : 'hidden md:flex'
+      }`}>
+        {selectedConversation ? (
+          // Chat Window
+          <ChatWindow conversation={selectedConversation} onBack={handleBack} />
         ) : (
-          // No User Selected - Empty State
+          // No Conversation Selected - Empty State
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <MessageSquare size={80} className="mb-4" />
             <h2 className="text-2xl font-semibold mb-2">Welcome to ChatterBox</h2>
-            <p>Select a user to view their profile or start chatting</p>
+            <p>Select a conversation or user to start chatting</p>
           </div>
         )}
       </div>
