@@ -23,8 +23,22 @@ const initializeSocket = (server) => {
   // Socket.io authentication middleware
   io.use(async (socket, next) => {
     try {
-      // Get token from handshake auth or query
-      const token = socket.handshake.auth.token || socket.handshake.query.token;
+      // Get token from handshake auth, query or cookie (support httpOnly cookie)
+      let token = socket.handshake.auth.token || socket.handshake.query.token;
+
+      // If token not provided in auth/query, try parsing cookie header (httpOnly cookie)
+      if (!token) {
+        const cookieHeader = socket.handshake.headers?.cookie;
+        if (cookieHeader) {
+          const jwtCookie = cookieHeader
+            .split(';')
+            .map((c) => c.trim())
+            .find((c) => c.startsWith('jwt='));
+          if (jwtCookie) {
+            token = jwtCookie.split('=')[1];
+          }
+        }
+      }
 
       if (!token) {
         return next(new Error('Authentication error: No token provided'));
