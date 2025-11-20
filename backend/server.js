@@ -4,8 +4,12 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
+import { createServer } from 'http';
 import connectDB from './config/db.js';
+import { initializeSocket } from './config/socket.js';
 import authRoutes from './routes/authRoutes.js';
+import conversationRoutes from './routes/conversationRoutes.js';
+import messageRoutes from './routes/messageRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 
@@ -14,6 +18,15 @@ dotenv.config();
 
 // Initialize Express app
 const app = express();
+
+// Create HTTP server
+const server = createServer(app);
+
+// Initialize Socket.io
+const io = initializeSocket(server);
+
+// Make io accessible to routes via app
+app.set('io', io);
 
 // Connect to MongoDB
 connectDB();
@@ -35,6 +48,8 @@ app.use(
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/conversations', conversationRoutes);
+app.use('/api/messages', messageRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -54,6 +69,7 @@ app.use((err, req, res, next) => {
 
 // Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 ChatterBox Server running on port ${PORT}`);
+  console.log(`🔌 Socket.io initialized and ready`);
 });
