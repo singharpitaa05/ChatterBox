@@ -1,10 +1,11 @@
-// CHAT WINDOW COMPONENT
+// CHAT WINDOW COMPONENT WITH MEDIA SUPPORT
 
 import { ArrowLeft, MoreVertical } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { getMessages, markMessagesAsSeen, sendMessage as sendMessageAPI } from '../services/messageService';
+import { uploadAvatar } from '../services/userService';
 import ChatInput from './ChatInput';
 import ChatMessage from './ChatMessage';
 
@@ -97,7 +98,7 @@ const ChatWindow = ({ conversation, onBack }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Handle sending message
+  // Handle sending text message
   const handleSendMessage = async (content) => {
     setSending(true);
 
@@ -110,6 +111,41 @@ const ChatWindow = ({ conversation, onBack }) => {
     if (result.success) {
       setMessages((prev) => [...prev, result.data]);
       scrollToBottom();
+    }
+
+    setSending(false);
+  };
+
+  // Handle sending media (images/files)
+  const handleSendMedia = async (file, caption) => {
+    setSending(true);
+
+    try {
+      // Upload file to Cloudinary using the avatar upload endpoint
+      // (We're reusing this for simplicity - you could create a separate media upload endpoint)
+      const uploadResult = await uploadAvatar(file);
+
+      if (uploadResult.success) {
+        // Determine message type based on file type
+        const messageType = file.type.startsWith('image/') ? 'image' : 'file';
+
+        // Send message with file URL
+        const result = await sendMessageAPI(
+          conversation.otherParticipant._id,
+          uploadResult.data.avatar, // Cloudinary URL
+          messageType
+        );
+
+        if (result.success) {
+          setMessages((prev) => [...prev, result.data]);
+          scrollToBottom();
+        }
+      } else {
+        alert('Failed to upload file: ' + uploadResult.error);
+      }
+    } catch (error) {
+      console.error('Error uploading media:', error);
+      alert('Failed to upload file');
     }
 
     setSending(false);
@@ -204,6 +240,7 @@ const ChatWindow = ({ conversation, onBack }) => {
       {/* Chat input */}
       <ChatInput
         onSendMessage={handleSendMessage}
+        onSendMedia={handleSendMedia}
         disabled={sending}
         onTyping={handleTyping}
       />
