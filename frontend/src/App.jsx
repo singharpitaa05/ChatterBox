@@ -9,6 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import ProfileSetupPage from './pages/ProfileSetupPage';
+import SettingsPage from './pages/SettingsPage';
 import SignupPage from './pages/SignupPage';
 
 function App() {
@@ -37,6 +38,14 @@ function App() {
                 element={
                   <PrivateRoute>
                     <DashboardPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <PrivateRoute>
+                    <SettingsPage />
                   </PrivateRoute>
                 }
               />
